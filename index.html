@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wedding Budget Planner</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            box-sizing: border-box;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+            background-color: #f9f9f9;
+        }
+        h2, h3 {
+            color: #333;
+            text-align: center;
+        }
+        input, select {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            box-sizing: border-box;
+            background-color: #fff;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+        input:focus, select:focus {
+            border-color: #1e7e34;
+            box-shadow: 0 0 8px rgba(30, 126, 52, 0.3);
+            outline: none;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            color: white;
+            background: #1e7e34;
+            cursor: pointer;
+            transition: background 0.3s ease, transform 0.2s ease;
+        }
+        button:hover {
+            background: red;
+            transform: scale(1.02);
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+        table, th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f4f4f4;
+        }
+        .within-budget {
+            color: green;
+        }
+        .over-budget {
+            color: red;
+        }
+        .chart-container {
+            margin-top: 20px;
+            width: 100%;
+            height: 300px;
+        }
+        .expense-form {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .expense-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #fff;
+            position: relative;
+        }
+        .delete-icon {
+            cursor: pointer;
+            color: red;
+            font-size: 20px;
+            font-weight: bold;
+            margin-left: auto;
+        }
+        @media (max-width: 600px) {
+            .expense-item {
+                flex-direction: column;
+            }
+            .delete-icon {
+                margin-left: 0;
+                margin-top: 10px;
+            }
+        }
+        .input-label {
+            font-size: 14px;
+            font-weight: bold;
+            color: #555;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+
+    <script type="text/babel">
+        function App() {
+            const [expenses, setExpenses] = React.useState([]);
+            const [total, setTotal] = React.useState(0);
+            const [showSignIn, setShowSignIn] = React.useState(true);
+            const [showSignUp, setShowSignUp] = React.useState(false);
+            const [budget, setBudget] = React.useState(0);
+
+            const commonExpenses = [
+                "Venue", "Catering", "Photography", "Attire", "Flowers", 
+                "Music", "Decor", "Invitations", "Transportation", 
+                "Favors", "Rings", "Other"
+            ];
+
+            const addExpense = () => {
+                setExpenses([...expenses, { 
+                    name: 'Venue', 
+                    customName: '', 
+                    cost: '' 
+                }]);
+            };
+
+            const handleExpenseChange = (index, field, value) => {
+                const newExpenses = [...expenses];
+                newExpenses[index][field] = value;
+                setExpenses(newExpenses);
+            };
+
+            const deleteExpense = (index) => {
+                const newExpenses = expenses.filter((_, i) => i !== index);
+                setExpenses(newExpenses);
+            };
+
+            const calculateTotal = () => {
+                const totalCost = expenses.reduce((acc, exp) => 
+                    acc + (parseFloat(exp.cost) || 0), 0);
+                setTotal(totalCost);
+                updateChart();
+            };
+
+            const downloadAsJPEG = () => {
+                html2canvas(document.getElementById("budgetTable")).then(canvas => {
+                    const link = document.createElement('a');
+                    link.href = canvas.toDataURL("image/jpeg");
+                    link.download = "budget_summary.jpg";
+                    link.click();
+                });
+            };
+
+            const updateChart = () => {
+                const ctx = document.getElementById('expenseChart').getContext('2d');
+                const labels = expenses.map(exp => 
+                    exp.name === 'Other' ? exp.customName : exp.name);
+                const data = expenses.map(exp => parseFloat(exp.cost) || 0);
+                const totalCost = data.reduce((acc, val) => acc + val, 0);
+
+                if (window.myChart) window.myChart.destroy();
+
+                window.myChart = new Chart(ctx, {
+                    type: 'pie',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: data,
+                            backgroundColor: [
+                                '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0',
+                                '#9966FF', '#FF9F40', '#C9CBCF', '#FFCDD2',
+                                '#F8BBD0', '#E1BEE7', '#D1C4E9', '#BBDEFB'
+                            ],
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom' },
+                            tooltip: {
+                                callbacks: {
+                                    label: function (context) {
+                                        const label = context.label || '';
+                                        const value = context.raw || 0;
+                                        const percentage = ((value / totalCost) * 100).toFixed(2);
+                                        return `${label}: $${value} (${percentage}%)`;
+                                    }
+                                }
+                            },
+                            datalabels: {
+                                formatter: (value) => 
+                                    ((value / totalCost) * 100).toFixed(2) + '%',
+                                color: '#fff',
+                                font: { size: 14, weight: 'bold' },
+                            }
+                        }
+                    },
+                    plugins: [ChartDataLabels]
+                });
+            };
+
+            return (
+                <div>
+                    {showSignIn ? (
+                        <div>
+                            <h2>Sign In</h2>
+                            <input type="email" placeholder="Enter your email" />
+                            <input type="password" placeholder="Enter your password" />
+                            <button onClick={() => setShowSignIn(false)}>
+                                Sign In
+                            </button>
+                            <button onClick={() => {
+                                setShowSignIn(false);
+                                setShowSignUp(true);
+                            }}>
+                                Sign Up
+                            </button>
+                        </div>
+                    ) : showSignUp ? (
+                        <div>
+                            <h2>Sign Up</h2>
+                            <input type="text" placeholder="Enter your name" />
+                            <input type="email" placeholder="Enter your email" />
+                            <input type="password" placeholder="Create a password" />
+                            <button onClick={() => {
+                                setShowSignUp(false);
+                                setShowSignIn(true);
+                            }}>
+                                Back to Sign In
+                            </button>
+                            <button onClick={() => setShowSignUp(false)}>
+                                Sign Up
+                            </button>
+                        </div>
+                    ) : (
+                        <div>
+                            <h2>Wedding Budget Planner</h2>
+                            <div className="expense-form">
+                                <div className="input-label">Total Wedding Budget</div>
+                                <input type="number" 
+                                    placeholder="Enter your budget" 
+                                    value={budget} 
+                                    onChange={(e) => setBudget(e.target.value)} 
+                                />
+                                {expenses.map((exp, index) => (
+                                    <div key={index} className="expense-item">
+                                        <select 
+                                            value={exp.name} 
+                                            onChange={(e) => 
+                                                handleExpenseChange(index, 'name', e.target.value)}
+                                        >
+                                            {commonExpenses.map((option, idx) => (
+                                                <option key={idx} value={option}>
+                                                    {option}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        {exp.name === 'Other' && (
+                                            <input 
+                                                type="text" 
+                                                placeholder="Custom Expense" 
+                                                value={exp.customName} 
+                                                onChange={(e) => 
+                                                    handleExpenseChange(index, 'customName', e.target.value)}
+                                            />
+                                        )}
+                                        <input 
+                                            type="number" 
+                                            placeholder="Estimated Cost" 
+                                            value={exp.cost} 
+                                            onChange={(e) => 
+                                                handleExpenseChange(index, 'cost', e.target.value)}
+                                        />
+                                        <span className="delete-icon" 
+                                            onClick={() => deleteExpense(index)}>
+                                            ✕
+                                        </span>
+                                    </div>
+                                ))}
+                                <button onClick={addExpense}>
+                                    + Add Expense
+                                </button>
+                                <button onClick={calculateTotal}>
+                                    Calculate
+                                </button>
+                            </div>
+                            <div id="budgetTable">
+                                <table>
+                                    <thead>
+                                        <tr><th>Expense</th><th>Estimated Cost</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        {expenses.map((exp, index) => (
+                                            <tr key={index}>
+                                                <td>{exp.name === 'Other' ? exp.customName : exp.name}</td>
+                                                <td>${exp.cost}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr>
+                                            <td><strong>Total Wedding Budget</strong></td>
+                                            <td><strong>${budget}</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Total Expenses</strong></td>
+                                            <td><strong>${total}</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Budget Remaining</strong></td>
+                                            <td className={budget - total >= 0 ? 'within-budget' : 'over-budget'}>
+                                                <strong>${budget - total}</strong>
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                            <button onClick={downloadAsJPEG}>
+                                Download as JPEG
+                            </button>
+                            <div className="chart-container">
+                                <canvas id="expenseChart"></canvas>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+        ReactDOM.render(<App />, document.getElementById('app'));
+    </script>
+</body>
+</html>
